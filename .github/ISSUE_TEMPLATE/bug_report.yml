@@ -1,0 +1,53 @@
+name: Bug report
+description: Something wing did not do, or did differently from what you expected
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The exact command and the exact output, including any error.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: wing version
+      placeholder: "wing 0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Windows version
+      options:
+        - Windows 11 (24H2)
+        - Windows 11 (23H2)
+        - Windows 10
+        - Windows Server
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: package
+    attributes:
+      label: Package
+      description: Which package identifier was involved, if any. If a manifest in
+        winget-pkgs looks wrong, please link to it - that is usually the root cause.
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: >
+        `wing --verbose` output, relevant lines from
+        %LOCALAPPDATA%\wing\<package>-install.log, or anything else that helps.

@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --release
+
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Assemble artifacts
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $stage = "dist"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $exe = "target\x86_64-pc-windows-msvc\release\wing.exe"
+          $name = "wing-$tag-x86_64"
+          Copy-Item $exe "$stage\$name.exe"
+          Copy-Item LICENSE  "$stage\LICENSE"
+          Copy-Item README.md "$stage\README.md"
+
+          Compress-Archive -Path "$stage\*" -DestinationPath "$stage\$name.zip"
+          Remove-Item "$stage\$name.exe"
+
+          # Checksums cover every file that ends up in the release.
+          $lines = Get-ChildItem $stage -File |
+            Sort-Object Name |
+            ForEach-Object {
+              "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+            }
+          Set-Content "$stage\SHA256SUMS" $lines
+          Get-ChildItem $stage -File | Select-Object Name, Length
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS
+          generate_release_notes: true
+          fail_on_unmatched_files: true
