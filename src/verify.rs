@@ -22,7 +22,7 @@ pub fn sha256_file(path: &Path) -> Result<String> {
             hasher.update(&buf[..n]);
         }
     } else {
-        let nblocks = ((size as usize) + BLOCK - 1) / BLOCK;
+        let nblocks = (size as usize).div_ceil(BLOCK);
         let digests: Vec<[u8; 32]> = (0..nblocks)
             .into_par_iter()
             .map(|i| {

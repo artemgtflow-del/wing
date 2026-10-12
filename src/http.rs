@@ -5,7 +5,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{IsTerminal, Write};
 use std::os::windows::fs::FileExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -59,16 +59,15 @@ impl Http {
     }
 
     pub async fn get_string(&self, url: &str) -> std::result::Result<String, FetchError> {
-        let resp = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| FetchError { not_found: false, msg: format!("{url}: {e}") })?;
+        let resp = self.client.get(url).send().await.map_err(|e| FetchError {
+            not_found: false,
+            msg: format!("{url}: {e}"),
+        })?;
         let resp = check(resp, url)?;
-        resp.text()
-            .await
-            .map_err(|e| FetchError { not_found: false, msg: format!("{url}: {e}") })
+        resp.text().await.map_err(|e| FetchError {
+            not_found: false,
+            msg: format!("{url}: {e}"),
+        })
     }
 
     pub async fn get_string_with_header(
@@ -82,11 +81,15 @@ impl Http {
             .header(ACCEPT, accept)
             .send()
             .await
-            .map_err(|e| FetchError { not_found: false, msg: format!("{url}: {e}") })?;
+            .map_err(|e| FetchError {
+                not_found: false,
+                msg: format!("{url}: {e}"),
+            })?;
         let resp = check(resp, url)?;
-        resp.text()
-            .await
-            .map_err(|e| FetchError { not_found: false, msg: format!("{url}: {e}") })
+        resp.text().await.map_err(|e| FetchError {
+            not_found: false,
+            msg: format!("{url}: {e}"),
+        })
     }
 
     /// Downloads `url` to `dest`, using parallel byte ranges when the server
@@ -121,10 +124,9 @@ impl Http {
         };
 
         let chunk_size: u64 = 8 * 1024 * 1024;
-        let nchunks = ((total + chunk_size - 1) / chunk_size).clamp(1, 8) as usize;
-        let file = Arc::new(
-            File::create(dest).with_context(|| format!("creating {}", dest.display()))?,
-        );
+        let nchunks = total.div_ceil(chunk_size).clamp(1, 8) as usize;
+        let file =
+            Arc::new(File::create(dest).with_context(|| format!("creating {}", dest.display()))?);
         file.set_len(total)?;
 
         let done = Arc::new(AtomicU64::new(0));
@@ -156,9 +158,11 @@ impl Http {
                     }
                     if verbose {
                         let pct = done.load(Ordering::Relaxed) as f64 * 100.0 / total as f64;
-                        eprint!("\r  downloading {pct:5.1}%  {:.1}/{:.1} MB",
+                        eprint!(
+                            "\r  downloading {pct:5.1}%  {:.1}/{:.1} MB",
                             done.load(Ordering::Relaxed) as f64 / 1e6,
-                            total as f64 / 1e6);
+                            total as f64 / 1e6
+                        );
                         let _ = std::io::stderr().flush();
                     }
                 }
@@ -217,7 +221,11 @@ impl Http {
 fn content_length(h: &HeaderMap) -> u64 {
     h.get("content-range")
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.rsplit('/').next().and_then(|s| s.trim().parse::<u64>().ok()))
+        .and_then(|v| {
+            v.rsplit('/')
+                .next()
+                .and_then(|s| s.trim().parse::<u64>().ok())
+        })
         .unwrap_or(0)
 }
 
@@ -236,4 +244,3 @@ pub fn human(n: u64) -> String {
         format!("{v:.1} {}", U[i])
     }
 }
-

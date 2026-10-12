@@ -25,6 +25,9 @@ const INSTALLER_KINDS: &[&str] = &[
 ];
 
 #[derive(Clone, Debug)]
+// Fields mirror the manifest and ARP schemas. Some surface only in --json or are
+// kept so future commands (trust lists, diagnostics) do not re-parse the source.
+#[allow(dead_code)]
 pub struct Installer {
     pub architecture: String,
     /// per-installer `InstallerType` (msi, exe, zip, msix, …)
@@ -46,11 +49,7 @@ pub struct Installer {
 impl Installer {
     /// Best-effort file name from the download URL.
     pub fn file_name(&self) -> String {
-        let path = self
-            .url
-            .split(['?', '#'])
-            .next()
-            .unwrap_or(&self.url);
+        let path = self.url.split(['?', '#']).next().unwrap_or(&self.url);
         path.rsplit('/')
             .next()
             .filter(|s| !s.is_empty())
@@ -69,7 +68,10 @@ pub struct InstallerSwitches {
 impl InstallerSwitches {
     pub fn for_mode(&self, mode: &str) -> Option<&str> {
         match mode {
-            "silent" => self.silent.as_deref().or(self.silent_with_progress.as_deref()),
+            "silent" => self
+                .silent
+                .as_deref()
+                .or(self.silent_with_progress.as_deref()),
             "silentWithProgress" => self
                 .silent_with_progress
                 .as_deref()
@@ -80,12 +82,18 @@ impl InstallerSwitches {
 }
 
 #[derive(Clone, Debug)]
+// Fields mirror the manifest and ARP schemas. Some surface only in --json or are
+// kept so future commands (trust lists, diagnostics) do not re-parse the source.
+#[allow(dead_code)]
 pub struct Dependency {
     pub id: String,
     pub version: Option<String>,
 }
 
 #[derive(Clone, Debug)]
+// Fields mirror the manifest and ARP schemas. Some surface only in --json or are
+// kept so future commands (trust lists, diagnostics) do not re-parse the source.
+#[allow(dead_code)]
 pub struct Manifest {
     pub id: String,
     pub version: String,
@@ -323,7 +331,9 @@ pub fn parse_manifest(
     }
 
     let loc = locale_yaml.and_then(parse_yaml);
-    let uninstall_args = loc.as_ref().and_then(|v| get_str(v, "Microsoft.UninstallArguments"));
+    let uninstall_args = loc
+        .as_ref()
+        .and_then(|v| get_str(v, "Microsoft.UninstallArguments"));
 
     // ProductCode and UpgradeCode are frequently declared per installer rather
     // than at the manifest root; `wing uninstall` needs one of them to remove
@@ -447,9 +457,7 @@ impl<'a> Loader<'a> {
                 if n.ends_with(&suffix) && !n.contains(".locale.") {
                     let url = format!("{dir}{n}");
                     if let Some(body) = fetch_file(self.http, &url, !self.no_cache).await? {
-                        let stem = n
-                            .trim_end_matches(&suffix)
-                            .to_string();
+                        let stem = n.trim_end_matches(&suffix).to_string();
                         return Ok(((*kind).to_string(), body, stem));
                     }
                 }
@@ -484,7 +492,8 @@ pub async fn list_dir(http: &Http, dir: &str) -> Result<Vec<String>> {
     let body = http
         .get_string_with_header(&url, "application/vnd.github+json")
         .await?;
-    let v: serde_json::Value = serde_json::from_str(&body).context("unexpected GitHub API response")?;
+    let v: serde_json::Value =
+        serde_json::from_str(&body).context("unexpected GitHub API response")?;
     Ok(v.as_array()
         .map(|a| {
             a.iter()
@@ -512,7 +521,7 @@ mod tests {
         }
     }
 
-const DEFAULT: &str = "PackageIdentifier: Publisher.Name
+    const DEFAULT: &str = "PackageIdentifier: Publisher.Name
 PackageVersion: 1.2.3
 DefaultLocale: en-US
 ManifestType: default
@@ -527,16 +536,16 @@ Dependencies:
   MinimumVersion: 2.0.0
 ";
 
-fn parse(default_yaml: &str, installer_yaml: &str) -> crate::manifest::Manifest {
-    parse_manifest(&row(), default_yaml, installer_yaml, None).expect("parse")
-}
+    fn parse(default_yaml: &str, installer_yaml: &str) -> crate::manifest::Manifest {
+        parse_manifest(&row(), default_yaml, installer_yaml, None).expect("parse")
+    }
 
-#[test]
-fn installer_type_declared_per_installer() {
-    // `InstallerType` sits inside each Installers entry, not at the root. If this
-    // is missed the tool thinks the package is a generic installer and loses the
-    // ability to choose a silent mode.
-    let installer = "PackageIdentifier: Publisher.Name
+    #[test]
+    fn installer_type_declared_per_installer() {
+        // `InstallerType` sits inside each Installers entry, not at the root. If this
+        // is missed the tool thinks the package is a generic installer and loses the
+        // ability to choose a silent mode.
+        let installer = "PackageIdentifier: Publisher.Name
 PackageVersion: 1.2.3
 Installers:
 - InstallerLocale: en-US
@@ -550,15 +559,18 @@ Installers:
 ManifestType: installer
 ManifestVersion: 1.5.0
 ";
-    let m = parse(DEFAULT, installer);
-    assert_eq!(m.kind, "msi");
-    assert_eq!(m.install_modes, vec!["silentWithProgress"]);
-    assert_eq!(m.product_code.as_deref(), Some("{11111111-2222-3333-4444-555555555555}"));
-}
+        let m = parse(DEFAULT, installer);
+        assert_eq!(m.kind, "msi");
+        assert_eq!(m.install_modes, vec!["silentWithProgress"]);
+        assert_eq!(
+            m.product_code.as_deref(),
+            Some("{11111111-2222-3333-4444-555555555555}")
+        );
+    }
 
-#[test]
-fn installer_type_at_root_is_preferred() {
-    let installer = "PackageIdentifier: Publisher.Name
+    #[test]
+    fn installer_type_at_root_is_preferred() {
+        let installer = "PackageIdentifier: Publisher.Name
 InstallerType: zip
 Installers:
 - Architecture: x64
@@ -566,13 +578,13 @@ Installers:
   InstallerSha256: AABB
 ManifestType: installer
 ";
-    let m = parse(DEFAULT, installer);
-    assert_eq!(m.kind, "zip");
-}
+        let m = parse(DEFAULT, installer);
+        assert_eq!(m.kind, "zip");
+    }
 
-#[test]
-fn switches_as_mapping_and_as_string() {
-    let mapped = "InstallerType: exe
+    #[test]
+    fn switches_as_mapping_and_as_string() {
+        let mapped = "InstallerType: exe
 Installers:
 - Architecture: x64
   InstallerUrl: https://example.invalid/app.exe
@@ -582,96 +594,96 @@ InstallerSwitches:
   SilentWithProgress: /S
   Interactive: ''
 ";
-    let m = parse(DEFAULT, mapped);
-    assert_eq!(m.switches.silent.as_deref(), Some("-s"));
-    assert_eq!(m.switches.silent_with_progress.as_deref(), Some("/S"));
+        let m = parse(DEFAULT, mapped);
+        assert_eq!(m.switches.silent.as_deref(), Some("-s"));
+        assert_eq!(m.switches.silent_with_progress.as_deref(), Some("/S"));
 
-    let bare = "InstallerType: exe
+        let bare = "InstallerType: exe
 Installers:
 - Architecture: x64
   InstallerUrl: https://example.invalid/app.exe
   InstallerSha256: AABB
 InstallerSwitches: /quiet
 ";
-    let m = parse(DEFAULT, bare);
-    assert_eq!(m.switches.silent.as_deref(), Some("/quiet"));
-    assert_eq!(m.switches.for_mode("silent"), Some("/quiet"));
-    assert_eq!(m.switches.for_mode("interactive"), None);
-}
+        let m = parse(DEFAULT, bare);
+        assert_eq!(m.switches.silent.as_deref(), Some("/quiet"));
+        assert_eq!(m.switches.for_mode("silent"), Some("/quiet"));
+        assert_eq!(m.switches.for_mode("interactive"), None);
+    }
 
-#[test]
-fn dependencies_with_and_without_version() {
-    let installer = "InstallerType: msi
+    #[test]
+    fn dependencies_with_and_without_version() {
+        let installer = "InstallerType: msi
 Installers:
 - Architecture: x64
   InstallerUrl: https://example.invalid/app.msi
   InstallerSha256: AABB
 ";
-    let m = parse(DEFAULT, installer);
-    assert_eq!(m.dependencies.len(), 1);
-    assert_eq!(m.dependencies[0].id, "Publisher.Deps");
-    assert_eq!(m.dependencies[0].version.as_deref(), Some("2.0.0"));
-    assert_eq!(m.commands, vec!["name"]);
-    assert_eq!(m.tags, vec!["utility"]);
-    assert_eq!(m.min_os_version.as_deref(), Some("10.0.17763.0"));
-}
+        let m = parse(DEFAULT, installer);
+        assert_eq!(m.dependencies.len(), 1);
+        assert_eq!(m.dependencies[0].id, "Publisher.Deps");
+        assert_eq!(m.dependencies[0].version.as_deref(), Some("2.0.0"));
+        assert_eq!(m.commands, vec!["name"]);
+        assert_eq!(m.tags, vec!["utility"]);
+        assert_eq!(m.min_os_version.as_deref(), Some("10.0.17763.0"));
+    }
 
-#[test]
-fn sha256_is_required_and_normalised() {
-    let no_sha = "InstallerType: exe
+    #[test]
+    fn sha256_is_required_and_normalised() {
+        let no_sha = "InstallerType: exe
 Installers:
 - Architecture: x64
   InstallerUrl: https://example.invalid/app.exe
 ";
-    let err = parse_manifest(&row(), DEFAULT, no_sha, None).unwrap_err();
-    assert!(err.to_string().contains("InstallerSha256"), "{err}");
+        let err = parse_manifest(&row(), DEFAULT, no_sha, None).unwrap_err();
+        assert!(err.to_string().contains("InstallerSha256"), "{err}");
 
-    let lower = "InstallerType: exe
+        let lower = "InstallerType: exe
 Installers:
 - Architecture: x64
   InstallerUrl: https://example.invalid/app.exe
   InstallerSha256: aabbcc
 ";
-    let m = parse(DEFAULT, lower);
-    assert_eq!(m.installers[0].sha256, "AABBCC");
-}
+        let m = parse(DEFAULT, lower);
+        assert_eq!(m.installers[0].sha256, "AABBCC");
+    }
 
-#[test]
-fn manifest_without_installers_is_rejected() {
-    let empty = "InstallerType: msi
+    #[test]
+    fn manifest_without_installers_is_rejected() {
+        let empty = "InstallerType: msi
 ManifestType: installer
 ";
-    let err = parse_manifest(&row(), DEFAULT, empty, None).unwrap_err();
-    assert!(err.to_string().contains("no installers"), "{err}");
-}
+        let err = parse_manifest(&row(), DEFAULT, empty, None).unwrap_err();
+        assert!(err.to_string().contains("no installers"), "{err}");
+    }
 
-#[test]
-fn locale_file_supplies_uninstall_arguments() {
-    let installer = "InstallerType: exe
+    #[test]
+    fn locale_file_supplies_uninstall_arguments() {
+        let installer = "InstallerType: exe
 Installers:
 - Architecture: x64
   InstallerUrl: https://example.invalid/app.exe
   InstallerSha256: AABB
 ";
-    let locale = "PackageIdentifier: Publisher.Name
+        let locale = "PackageIdentifier: Publisher.Name
 Publisher: Example Ltd
 PackageUrl: https://example.invalid
 Microsoft.UninstallArguments: '/VERYSILENT'
 ";
-    let m = parse_manifest(&row(), DEFAULT, installer, Some(locale)).expect("parse");
-    assert_eq!(m.uninstall_args.as_deref(), Some("/VERYSILENT"));
-    assert_eq!(m.publisher.as_deref(), Some("Example Ltd"));
-}
+        let m = parse_manifest(&row(), DEFAULT, installer, Some(locale)).expect("parse");
+        assert_eq!(m.uninstall_args.as_deref(), Some("/VERYSILENT"));
+        assert_eq!(m.publisher.as_deref(), Some("Example Ltd"));
+    }
 
-#[test]
-fn installer_file_name_survives_query_strings() {
-    let installer = "InstallerType: exe
+    #[test]
+    fn installer_file_name_survives_query_strings() {
+        let installer = "InstallerType: exe
 Installers:
 - Architecture: x64
   InstallerUrl: https://example.invalid/download/app.exe?token=abc
   InstallerSha256: AABB
 ";
-    let m = parse(DEFAULT, installer);
-    assert_eq!(m.installers[0].file_name(), "app.exe");
-}
+        let m = parse(DEFAULT, installer);
+        assert_eq!(m.installers[0].file_name(), "app.exe");
+    }
 }

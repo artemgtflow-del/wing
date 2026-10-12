@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Root of wing's state.
 ///
@@ -47,15 +47,8 @@ pub fn config_file() -> PathBuf {
 }
 
 pub fn ensure_dirs() -> std::io::Result<()> {
-    for d in [
-        data_dir(),
-        manifest_cache(),
-        downloads(),
-        apps(),
-        bin(),
-    ] {
+    for d in [data_dir(), manifest_cache(), downloads(), apps(), bin()] {
         std::fs::create_dir_all(d)?;
     }
     Ok(())
 }
-

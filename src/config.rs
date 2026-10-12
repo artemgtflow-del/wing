@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -31,10 +30,7 @@ impl Config {
             Ok(text) => match toml::from_str::<Config>(&text) {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!(
-                        "warning: ignoring {}: {e}",
-                        paths::config_file().display()
-                    );
+                    eprintln!("warning: ignoring {}: {e}", paths::config_file().display());
                     Config::default()
                 }
             },
@@ -67,15 +63,4 @@ pub fn publisher_allowed(trusted: &[String], publisher: Option<&str>) -> bool {
         return false;
     };
     trusted.iter().any(|t| t == &p.to_lowercase())
-}
-
-/// Serialises the config back to disk, used by `wing config set`.
-pub fn save(cfg: &Config) -> Result<()> {
-    let text = toml::to_string_pretty(cfg)?;
-    let path = paths::config_file();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, text)?;
-    Ok(())
 }

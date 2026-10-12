@@ -35,8 +35,13 @@ fn search_is_offline_and_fast() {
     // others and every spawn pays for process creation and antivirus. Measuring
     // the difference against the same binary doing nothing isolates the cost of
     // the actual search, which is stable regardless of machine load.
-    let baseline = time(|| wing().arg("--version").output().expect("run wing --version"))
-        .expect("wing --version must succeed");
+    let baseline = time(|| {
+        wing()
+            .arg("--version")
+            .output()
+            .expect("run wing --version")
+    })
+    .expect("wing --version must succeed");
     let start = std::time::Instant::now();
     let out = wing()
         .args(["search", "powershell", "--limit", "5"])

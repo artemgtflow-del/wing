@@ -51,7 +51,13 @@ fn dest_for(m: &Manifest, inst: &Installer) -> PathBuf {
 
 fn sanitize(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -108,7 +114,10 @@ pub fn run_install(choice: &Choice, file: &Path) -> Result<Outcome> {
     outcome.uninstall_args = m.uninstall_args.clone();
     // Installer-based packages often land somewhere that is not on PATH and do
     // not declare `Commands:`; make their executable reachable anyway.
-    if !matches!(handler_for(m, inst), Handler::Zip | Handler::SevenZip | Handler::TarGz) {
+    if !matches!(
+        handler_for(m, inst),
+        Handler::Zip | Handler::SevenZip | Handler::TarGz
+    ) {
         let linked = link_commands(m);
         if !linked.is_empty() {
             outcome.shims.extend(linked);
@@ -149,12 +158,13 @@ fn check_exit(code: i32) -> Result<()> {
 /// Split out from [`install_msi`] so the argument construction - which is where
 /// silent mode, scope and the logging switch interact - can be tested without
 /// touching the machine.
-pub fn msi_command(m: &Manifest, choice: &Choice, file: &Path, log: &Path) -> (String, Vec<String>) {
-    let mut args: Vec<String> = vec![
-        "/i".into(),
-        file.display().to_string(),
-        "/norestart".into(),
-    ];
+pub fn msi_command(
+    m: &Manifest,
+    choice: &Choice,
+    file: &Path,
+    log: &Path,
+) -> (String, Vec<String>) {
+    let mut args: Vec<String> = vec!["/i".into(), file.display().to_string(), "/norestart".into()];
     match choice.mode.as_str() {
         "silent" => args.push("/qn".into()),
         "silentWithProgress" => args.push("/passive".into()),
@@ -207,12 +217,20 @@ fn install_msix(file: &Path) -> Result<Outcome> {
     );
     let code = sysutil::run(
         Path::new("powershell.exe"),
-        &["-NoProfile".into(), "-NonInteractive".into(), "-Command".into(), script],
+        &[
+            "-NoProfile".into(),
+            "-NonInteractive".into(),
+            "-Command".into(),
+            script,
+        ],
     )?;
     if code != 0 {
         bail!("Add-AppxPackage failed with exit code {code}");
     }
-    Ok(Outcome { location: format!("MSIX package registered from {}", file.display()), ..Default::default() })
+    Ok(Outcome {
+        location: format!("MSIX package registered from {}", file.display()),
+        ..Default::default()
+    })
 }
 
 fn install_msu(file: &Path) -> Result<Outcome> {
@@ -222,7 +240,10 @@ fn install_msu(file: &Path) -> Result<Outcome> {
         "/norestart".into(),
     ];
     elevate(Path::new("wusa.exe"), &args)?;
-    Ok(Outcome { location: format!("update installed from {}", file.display()), ..Default::default() })
+    Ok(Outcome {
+        location: format!("update installed from {}", file.display()),
+        ..Default::default()
+    })
 }
 
 /// Builds the EXE installer command line without running it.
@@ -241,7 +262,14 @@ pub fn exe_command(m: &Manifest, choice: &Choice, file: &Path) -> (String, Vec<S
         args.retain(|a| a != "/install");
         args.push("/install".into());
         args.retain(|a| a != "/passive" && a != "/quiet");
-        args.push(if choice.mode == "interactive" { "/passive" } else { "/quiet" }.into());
+        args.push(
+            if choice.mode == "interactive" {
+                "/passive"
+            } else {
+                "/quiet"
+            }
+            .into(),
+        );
         args.push("/norestart".into());
     }
     (file.display().to_string(), args)
@@ -258,7 +286,10 @@ fn install_exe(m: &Manifest, choice: &Choice, file: &Path) -> Result<Outcome> {
     } else {
         check_exit(sysutil::run(program, &args)?)?;
     }
-    Ok(Outcome { location: format!("{} {} installed", m.id, m.version), ..Default::default() })
+    Ok(Outcome {
+        location: format!("{} {} installed", m.id, m.version),
+        ..Default::default()
+    })
 }
 
 // ------------------------------------------------------------- archive installs
@@ -394,8 +425,7 @@ pub fn purge_portable(id: &str, shims: &[String]) -> Result<()> {
     remove_links(shims);
     let dir = target_dir_for_id(id);
     if dir.exists() {
-        std::fs::remove_dir_all(&dir)
-            .with_context(|| format!("removing {}", dir.display()))?;
+        std::fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
     }
     println!("removed {}", dir.display());
     Ok(())
@@ -428,8 +458,7 @@ fn copy_ascii_shim(exe: &Path, bin: &Path, stem: &str) -> bool {
         }
         _ => return false,
     };
-    let cmd = format!("@echo off\r\n\"{prefix}%PATHSEP%{rest}\" %*\r\n")
-        .replace("%PATHSEP%", "\\");
+    let cmd = format!("@echo off\r\n\"{prefix}%PATHSEP%{rest}\" %*\r\n").replace("%PATHSEP%", "\\");
     std::fs::write(bin.join(format!("{stem}.cmd")), cmd).is_ok()
 }
 
@@ -437,12 +466,18 @@ fn collect_exes(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
     if depth > 4 || out.len() > 256 {
         return;
     }
-    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
     for e in rd.flatten() {
         let p = e.path();
         if p.is_dir() {
             collect_exes(&p, out, depth + 1);
-        } else if p.extension().and_then(|x| x.to_str()).map(|x| x.eq_ignore_ascii_case("exe")) == Some(true)
+        } else if p
+            .extension()
+            .and_then(|x| x.to_str())
+            .map(|x| x.eq_ignore_ascii_case("exe"))
+            == Some(true)
         {
             out.push(p);
         }
@@ -454,7 +489,11 @@ pub fn remove_links(shims: &[String]) {
     let bin = paths::bin();
     let mut removed = 0;
     for s in shims {
-        for cand in [bin.join(s), bin.join(format!("{s}.exe")), bin.join(format!("{s}.cmd"))] {
+        for cand in [
+            bin.join(s),
+            bin.join(format!("{s}.exe")),
+            bin.join(format!("{s}.cmd")),
+        ] {
             if cand.exists() && std::fs::remove_file(&cand).is_ok() {
                 removed += 1;
             }
@@ -560,8 +599,7 @@ pub fn locate_executable(m: &Manifest) -> Option<PathBuf> {
                     rd.flatten()
                         .map(|e| e.path())
                         .filter(|p| {
-                            p.is_file()
-                                && p.extension().and_then(|x| x.to_str()) == Some("exe")
+                            p.is_file() && p.extension().and_then(|x| x.to_str()) == Some("exe")
                         })
                         .collect()
                 })
@@ -623,11 +661,7 @@ pub fn link_commands(m: &Manifest) -> Vec<String> {
             Ok(false) => {}
             Err(e) => eprintln!("  warning: could not update PATH: {e}"),
         }
-        println!(
-            "  linked {} -> {}",
-            created.join(", "),
-            exe.display()
-        );
+        println!("  linked {} -> {}", created.join(", "), exe.display());
     }
     created
 }
@@ -639,11 +673,12 @@ pub fn link_commands(m: &Manifest) -> Vec<String> {
 /// so a direct run is attempted first and elevation is only the fallback.
 pub fn uninstall_with_args(program: &str, args: &str) -> Result<()> {
     let mut parts = program.trim().splitn(2, char::is_whitespace);
-    let exe = parts.next().filter(|s| !s.is_empty()).context("empty uninstall command")?;
+    let exe = parts
+        .next()
+        .filter(|s| !s.is_empty())
+        .context("empty uninstall command")?;
     if exe.to_ascii_lowercase().contains("winget") {
-        bail!(
-            "refusing to delegate to winget ({exe}); this package is managed elsewhere"
-        );
+        bail!("refusing to delegate to winget ({exe}); this package is managed elsewhere");
     }
     let mut argv: Vec<String> = parts
         .next()
@@ -675,221 +710,230 @@ mod tests {
     use crate::resolve::Choice;
     use std::path::Path;
 
-fn manifest(kind: &str, switches: InstallerSwitches, modes: &[&str]) -> Manifest {
-    Manifest {
-        id: "Publisher.Name".into(),
-        version: "1.2.3".into(),
-        publisher: Some("Example".into()),
-        homepage: None,
-        min_os_version: None,
-        release_date: None,
-        default_locale: None,
-        dependencies: Vec::new(),
-        tags: Vec::new(),
-        commands: Vec::new(),
-        upgrade_behavior: None,
-        installer_type: Some(kind.into()),
-        scope: None,
-        install_modes: modes.iter().map(|s| s.to_string()).collect(),
-        install_locations: Vec::new(),
-        elevation_required: false,
-        installers: vec![],
-        switches,
-        product_code: None,
-        upgrade_code: None,
-        uninstall_args: None,
-        kind: kind.into(),
-        url_dir: String::new(),
-        url_base: String::new(),
+    fn manifest(kind: &str, switches: InstallerSwitches, modes: &[&str]) -> Manifest {
+        Manifest {
+            id: "Publisher.Name".into(),
+            version: "1.2.3".into(),
+            publisher: Some("Example".into()),
+            homepage: None,
+            min_os_version: None,
+            release_date: None,
+            default_locale: None,
+            dependencies: Vec::new(),
+            tags: Vec::new(),
+            commands: Vec::new(),
+            upgrade_behavior: None,
+            installer_type: Some(kind.into()),
+            scope: None,
+            install_modes: modes.iter().map(|s| s.to_string()).collect(),
+            install_locations: Vec::new(),
+            elevation_required: false,
+            installers: vec![],
+            switches,
+            product_code: None,
+            upgrade_code: None,
+            uninstall_args: None,
+            kind: kind.into(),
+            url_dir: String::new(),
+            url_base: String::new(),
+        }
     }
-}
 
-fn installer(arch: &str, scope: Option<&str>) -> Installer {
-    Installer {
-        architecture: arch.into(),
-        installer_type: None,
-        install_modes: Vec::new(),
-        scope: scope.map(|s| s.into()),
-        url: "https://example.invalid/setup.exe".into(),
-        sha256: "AABB".into(),
-        product_code: None,
-        upgrade_code: None,
-        msix_family_name: None,
-        nested_installer_type: None,
-        display_name: None,
-        elevation_required: false,
-        file_size: 0,
+    fn installer(arch: &str, scope: Option<&str>) -> Installer {
+        Installer {
+            architecture: arch.into(),
+            installer_type: None,
+            install_modes: Vec::new(),
+            scope: scope.map(|s| s.into()),
+            url: "https://example.invalid/setup.exe".into(),
+            sha256: "AABB".into(),
+            product_code: None,
+            upgrade_code: None,
+            msix_family_name: None,
+            nested_installer_type: None,
+            display_name: None,
+            elevation_required: false,
+            file_size: 0,
+        }
     }
-}
 
-fn row() -> ManifestRow {
-    ManifestRow {
-        rowid: 1,
-        id: "Publisher.Name".into(),
-        name: "Name".into(),
-        version: "1.2.3".into(),
-        dir: String::new(),
-        base: "Publisher.Name".into(),
-        moniker: String::new(),
-        kind_token: "2035".into(),
+    fn row() -> ManifestRow {
+        ManifestRow {
+            rowid: 1,
+            id: "Publisher.Name".into(),
+            name: "Name".into(),
+            version: "1.2.3".into(),
+            dir: String::new(),
+            base: "Publisher.Name".into(),
+            moniker: String::new(),
+            kind_token: "2035".into(),
+        }
     }
-}
 
-fn choice(m: &Manifest, inst: Installer, mode: &str, scope: &str) -> Choice {
-    Choice {
-        row: row(),
-        manifest: m.clone(),
-        installer: inst,
-        mode: mode.into(),
-        scope: scope.into(),
-        verbose: false,
+    fn choice(m: &Manifest, inst: Installer, mode: &str, scope: &str) -> Choice {
+        Choice {
+            row: row(),
+            manifest: m.clone(),
+            installer: inst,
+            mode: mode.into(),
+            scope: scope.into(),
+            verbose: false,
+        }
     }
-}
 
-fn sw(silent: &str, silent_with_progress: &str, interactive: &str) -> InstallerSwitches {
-    InstallerSwitches {
-        silent: (!silent.is_empty()).then(|| silent.into()),
-        silent_with_progress: (!silent_with_progress.is_empty()).then(|| silent_with_progress.into()),
-        interactive: (!interactive.is_empty()).then(|| interactive.into()),
+    fn sw(silent: &str, silent_with_progress: &str, interactive: &str) -> InstallerSwitches {
+        InstallerSwitches {
+            silent: (!silent.is_empty()).then(|| silent.into()),
+            silent_with_progress: (!silent_with_progress.is_empty())
+                .then(|| silent_with_progress.into()),
+            interactive: (!interactive.is_empty()).then(|| interactive.into()),
+        }
     }
-}
 
-// ------------------------------------------------------------------ msiexec
+    // ------------------------------------------------------------------ msiexec
 
-#[test]
-fn msi_logging_switch_is_a_separate_argument() {
-    // Regression: as one argument the OS quotes it and msiexec rejects the whole
-    // command line with 1639, printing its usage instead of installing.
-    let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
-    let c = choice(&m, installer("x64", Some("user")), "silent", "user");
-    let log = Path::new("C:\\tmp\\name with spaces.log");
-    let (program, args) = msi_command(&m, &c, Path::new("C:\\tmp\\app.msi"), log);
+    #[test]
+    fn msi_logging_switch_is_a_separate_argument() {
+        // Regression: as one argument the OS quotes it and msiexec rejects the whole
+        // command line with 1639, printing its usage instead of installing.
+        let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
+        let c = choice(&m, installer("x64", Some("user")), "silent", "user");
+        let log = Path::new("C:\\tmp\\name with spaces.log");
+        let (program, args) = msi_command(&m, &c, Path::new("C:\\tmp\\app.msi"), log);
 
-    assert_eq!(program, "msiexec.exe");
-    assert!(args.contains(&"/L*v".to_string()));
-    let log_idx = args.iter().position(|a| a == "/L*v").unwrap();
-    assert_eq!(
-        args[log_idx + 1],
-        log.display().to_string(),
-        "the log path must be its own argument, not glued to the switch"
-    );
-    // Nothing may contain an embedded space in a switch-value position.
-    assert!(!args.iter().any(|a| a.starts_with("/L*v ")));
-}
+        assert_eq!(program, "msiexec.exe");
+        assert!(args.contains(&"/L*v".to_string()));
+        let log_idx = args.iter().position(|a| a == "/L*v").unwrap();
+        assert_eq!(
+            args[log_idx + 1],
+            log.display().to_string(),
+            "the log path must be its own argument, not glued to the switch"
+        );
+        // Nothing may contain an embedded space in a switch-value position.
+        assert!(!args.iter().any(|a| a.starts_with("/L*v ")));
+    }
 
-#[test]
-fn msi_silent_uses_qn_and_progress_uses_passive() {
-    let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
-    let file = Path::new("C:\\tmp\\app.msi");
+    #[test]
+    fn msi_silent_uses_qn_and_progress_uses_passive() {
+        let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
+        let file = Path::new("C:\\tmp\\app.msi");
 
-    let silent = choice(&m, installer("x64", Some("user")), "silent", "user");
-    let (_, a) = msi_command(&m, &silent, file, Path::new("l.log"));
-    assert!(a.contains(&"/qn".to_string()));
-    assert!(!a.contains(&"/passive".to_string()));
+        let silent = choice(&m, installer("x64", Some("user")), "silent", "user");
+        let (_, a) = msi_command(&m, &silent, file, Path::new("l.log"));
+        assert!(a.contains(&"/qn".to_string()));
+        assert!(!a.contains(&"/passive".to_string()));
 
-    let progress = choice(&m, installer("x64", Some("user")), "silentWithProgress", "user");
-    let (_, a) = msi_command(&m, &progress, file, Path::new("l.log"));
-    assert!(a.contains(&"/passive".to_string()));
-    assert!(!a.contains(&"/qn".to_string()));
-}
+        let progress = choice(
+            &m,
+            installer("x64", Some("user")),
+            "silentWithProgress",
+            "user",
+        );
+        let (_, a) = msi_command(&m, &progress, file, Path::new("l.log"));
+        assert!(a.contains(&"/passive".to_string()));
+        assert!(!a.contains(&"/qn".to_string()));
+    }
 
-#[test]
-fn msi_scope_maps_to_allusers() {
-    let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
-    let file = Path::new("C:\\tmp\\app.msi");
+    #[test]
+    fn msi_scope_maps_to_allusers() {
+        let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
+        let file = Path::new("C:\\tmp\\app.msi");
 
-    let machine = choice(&m, installer("x64", Some("machine")), "silent", "machine");
-    let (_, a) = msi_command(&m, &machine, file, Path::new("l.log"));
-    assert!(a.contains(&"ALLUSERS=1".to_string()));
-    assert!(!a.contains(&"MSIINSTALLPERUSER=1".to_string()));
+        let machine = choice(&m, installer("x64", Some("machine")), "silent", "machine");
+        let (_, a) = msi_command(&m, &machine, file, Path::new("l.log"));
+        assert!(a.contains(&"ALLUSERS=1".to_string()));
+        assert!(!a.contains(&"MSIINSTALLPERUSER=1".to_string()));
 
-    let user = choice(&m, installer("x64", Some("user")), "silent", "user");
-    let (_, a) = msi_command(&m, &user, file, Path::new("l.log"));
-    assert!(a.contains(&"ALLUSERS=2".to_string()));
-    assert!(a.contains(&"MSIINSTALLPERUSER=1".to_string()));
-}
+        let user = choice(&m, installer("x64", Some("user")), "silent", "user");
+        let (_, a) = msi_command(&m, &user, file, Path::new("l.log"));
+        assert!(a.contains(&"ALLUSERS=2".to_string()));
+        assert!(a.contains(&"MSIINSTALLPERUSER=1".to_string()));
+    }
 
-#[test]
-fn msi_manifest_switches_are_appended_verbatim() {
-    let m = manifest("wix", sw("/qn REBOOT=0", "", "/qb"), &["silent"]);
-    let c = choice(&m, installer("x64", Some("user")), "silent", "user");
-    let (_, args) = msi_command(&m, &c, Path::new("a.msi"), Path::new("l.log"));
-    assert!(args.contains(&"/qn".to_string()) && args.contains(&"REBOOT=0".to_string()));
-}
+    #[test]
+    fn msi_manifest_switches_are_appended_verbatim() {
+        let m = manifest("wix", sw("/qn REBOOT=0", "", "/qb"), &["silent"]);
+        let c = choice(&m, installer("x64", Some("user")), "silent", "user");
+        let (_, args) = msi_command(&m, &c, Path::new("a.msi"), Path::new("l.log"));
+        assert!(args.contains(&"/qn".to_string()) && args.contains(&"REBOOT=0".to_string()));
+    }
 
-#[test]
-fn msi_never_repeats_reboot_property() {
-    // /norestart already means REBOOT=ReallySuppress; passing both made the
-    // command line carry the property twice.
-    let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
-    let c = choice(&m, installer("x64", Some("user")), "silent", "user");
-    let (_, args) = msi_command(&m, &c, Path::new("a.msi"), Path::new("l.log"));
-    assert_eq!(
-        args.iter().filter(|a| a.contains("ReallySuppress")).count(),
-        0
-    );
-    assert!(args.contains(&"/norestart".to_string()));
-}
+    #[test]
+    fn msi_never_repeats_reboot_property() {
+        // /norestart already means REBOOT=ReallySuppress; passing both made the
+        // command line carry the property twice.
+        let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
+        let c = choice(&m, installer("x64", Some("user")), "silent", "user");
+        let (_, args) = msi_command(&m, &c, Path::new("a.msi"), Path::new("l.log"));
+        assert_eq!(
+            args.iter().filter(|a| a.contains("ReallySuppress")).count(),
+            0
+        );
+        assert!(args.contains(&"/norestart".to_string()));
+    }
 
-// ------------------------------------------------------------------- exe
+    // ------------------------------------------------------------------- exe
 
-#[test]
-fn exe_uses_the_switch_for_the_selected_mode() {
-    let m = manifest(
-        "inno",
-        sw("/VERYSILENT /NORESTART /SP-", "/SILENT /SP-", ""),
-        &["silent", "silentWithProgress"],
-    );
-    let file = Path::new("C:\\tmp\\setup.exe");
+    #[test]
+    fn exe_uses_the_switch_for_the_selected_mode() {
+        let m = manifest(
+            "inno",
+            sw("/VERYSILENT /NORESTART /SP-", "/SILENT /SP-", ""),
+            &["silent", "silentWithProgress"],
+        );
+        let file = Path::new("C:\\tmp\\setup.exe");
 
-    let silent = choice(&m, installer("x64", None), "silent", "user");
-    let (_, args) = exe_command(&m, &silent, file);
-    assert!(args.contains(&"/VERYSILENT".to_string()));
+        let silent = choice(&m, installer("x64", None), "silent", "user");
+        let (_, args) = exe_command(&m, &silent, file);
+        assert!(args.contains(&"/VERYSILENT".to_string()));
 
-    let progress = choice(&m, installer("x64", None), "silentWithProgress", "user");
-    let (_, args) = exe_command(&m, &progress, file);
-    assert!(args.contains(&"/SILENT".to_string()));
-    assert!(!args.contains(&"/VERYSILENT".to_string()));
-}
+        let progress = choice(&m, installer("x64", None), "silentWithProgress", "user");
+        let (_, args) = exe_command(&m, &progress, file);
+        assert!(args.contains(&"/SILENT".to_string()));
+        assert!(!args.contains(&"/VERYSILENT".to_string()));
+    }
 
-#[test]
-fn exe_interactive_passes_no_switches() {
-    let m = manifest("inno", sw("/VERYSILENT", "/SILENT", ""), &["interactive"]);
-    let c = choice(&m, installer("x64", None), "interactive", "user");
-    let (_, args) = exe_command(&m, &c, Path::new("setup.exe"));
-    assert!(args.is_empty(), "interactive mode must not invent switches: {args:?}");
-}
+    #[test]
+    fn exe_interactive_passes_no_switches() {
+        let m = manifest("inno", sw("/VERYSILENT", "/SILENT", ""), &["interactive"]);
+        let c = choice(&m, installer("x64", None), "interactive", "user");
+        let (_, args) = exe_command(&m, &c, Path::new("setup.exe"));
+        assert!(
+            args.is_empty(),
+            "interactive mode must not invent switches: {args:?}"
+        );
+    }
 
-#[test]
-fn burn_arguments_do_not_contradict_each_other() {
-    // The manifest may already carry /install and /passive; a Burn bundle acts
-    // on whichever it sees last, so duplicates are removed before ours are added.
-    let m = manifest(
-        "burn",
-        sw("/install /passive", "/install /passive", ""),
-        &["silent"],
-    );
-    let c = choice(&m, installer("x64", None), "silent", "machine");
-    let (_, args) = exe_command(&m, &c, Path::new("setup.exe"));
+    #[test]
+    fn burn_arguments_do_not_contradict_each_other() {
+        // The manifest may already carry /install and /passive; a Burn bundle acts
+        // on whichever it sees last, so duplicates are removed before ours are added.
+        let m = manifest(
+            "burn",
+            sw("/install /passive", "/install /passive", ""),
+            &["silent"],
+        );
+        let c = choice(&m, installer("x64", None), "silent", "machine");
+        let (_, args) = exe_command(&m, &c, Path::new("setup.exe"));
 
-    assert_eq!(args.iter().filter(|a| *a == "/install").count(), 1);
-    assert_eq!(args.iter().filter(|a| *a == "/quiet").count(), 1);
-    assert_eq!(args.iter().filter(|a| *a == "/passive").count(), 0);
-    assert!(args.contains(&"/norestart".to_string()));
-}
+        assert_eq!(args.iter().filter(|a| *a == "/install").count(), 1);
+        assert_eq!(args.iter().filter(|a| *a == "/quiet").count(), 1);
+        assert_eq!(args.iter().filter(|a| *a == "/passive").count(), 0);
+        assert!(args.contains(&"/norestart".to_string()));
+    }
 
-// ------------------------------------------------------- dependency ordering
+    // ------------------------------------------------------- dependency ordering
 
-#[test]
-fn dependency_minimum_version_is_carried_on_the_dependency() {
-    let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
-    let with_dep = Manifest {
-        dependencies: vec![Dependency {
-            id: "Publisher.Deps".into(),
-            version: Some("2.5.0".into()),
-        }],
-        ..m
-    };
-    assert_eq!(with_dep.dependencies[0].version.as_deref(), Some("2.5.0"));
-}
+    #[test]
+    fn dependency_minimum_version_is_carried_on_the_dependency() {
+        let m = manifest("msi", InstallerSwitches::default(), &["silent"]);
+        let with_dep = Manifest {
+            dependencies: vec![Dependency {
+                id: "Publisher.Deps".into(),
+                version: Some("2.5.0".into()),
+            }],
+            ..m
+        };
+        assert_eq!(with_dep.dependencies[0].version.as_deref(), Some("2.5.0"));
+    }
 }

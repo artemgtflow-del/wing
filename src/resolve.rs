@@ -133,7 +133,11 @@ pub async fn select(
             rows[0].id,
             opts.arch.as_deref().unwrap_or(sysutil::arch()),
             opts.scope.as_deref().unwrap_or("any"),
-            if opts.interactive { "interactive" } else { "silent" }
+            if opts.interactive {
+                "interactive"
+            } else {
+                "silent"
+            }
         ),
     }
 }
@@ -144,11 +148,7 @@ struct Picked {
     scope: String,
 }
 
-fn pick_installer(
-    m: &Manifest,
-    opts: &InstallOptions,
-    version: &str,
-) -> Result<Option<Picked>> {
+fn pick_installer(m: &Manifest, opts: &InstallOptions, version: &str) -> Result<Option<Picked>> {
     let wanted_arch = opts.arch.clone().unwrap_or_else(|| sysutil::arch().into());
     let declared = &m.install_modes;
     let has = |mode: &str| declared.iter().any(|x| x == mode);
@@ -199,10 +199,11 @@ fn pick_installer(
     let Some((_, srank, inst)) = best else {
         return Ok(None);
     };
-    let scope = inst
-        .scope
-        .clone()
-        .unwrap_or_else(|| opts.scope.clone().unwrap_or_else(|| m.scope.clone().unwrap_or_else(|| "user".into())));
+    let scope = inst.scope.clone().unwrap_or_else(|| {
+        opts.scope
+            .clone()
+            .unwrap_or_else(|| m.scope.clone().unwrap_or_else(|| "user".into()))
+    });
     let _ = (srank, version);
     Ok(Some(Picked {
         installer: inst.clone(),

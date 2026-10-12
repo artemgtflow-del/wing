@@ -49,9 +49,18 @@ fn print_table(headers: &[&str], rows: &[Vec<String>]) {
         }
         s.trim_end().to_string()
     };
-    println!("{}", line(&headers.iter().map(|s| s.to_string()).collect::<Vec<_>>()));
+    println!(
+        "{}",
+        line(&headers.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    );
     if std::io::stdout().is_terminal() {
-        println!("{}", w.iter().map(|x| "-".repeat(*x)).collect::<Vec<_>>().join("  "));
+        println!(
+            "{}",
+            w.iter()
+                .map(|x| "-".repeat(*x))
+                .collect::<Vec<_>>()
+                .join("  ")
+        );
     }
     for r in rows {
         println!("{}", line(r));
@@ -141,9 +150,7 @@ fn search(ctx: &Ctx, a: SearchArgs) -> Result<()> {
     if ctx.json {
         let v: Vec<serde_json::Value> = hits
             .iter()
-            .map(|h| {
-                serde_json::json!({ "id": h.id, "name": h.name, "version": h.version })
-            })
+            .map(|h| serde_json::json!({ "id": h.id, "name": h.name, "version": h.version }))
             .collect();
         println!("{}", serde_json::to_string_pretty(&v)?);
         return Ok(());
@@ -178,7 +185,12 @@ async fn show(ctx: &Ctx, a: ShowArgs) -> Result<()> {
 
     let rows: Vec<_> = rows
         .into_iter()
-        .filter(|r| a.version.as_ref().map(|v| r.version.eq_ignore_ascii_case(v)).unwrap_or(true))
+        .filter(|r| {
+            a.version
+                .as_ref()
+                .map(|v| r.version.eq_ignore_ascii_case(v))
+                .unwrap_or(true)
+        })
         .collect();
     if rows.is_empty() {
         bail!(
@@ -258,7 +270,10 @@ async fn show(ctx: &Ctx, a: ShowArgs) -> Result<()> {
         println!("  homepage      {u}");
     }
     println!("  type          {}", m.kind);
-    println!("  scope         {}", m.scope.clone().unwrap_or_else(|| "user".into()));
+    println!(
+        "  scope         {}",
+        m.scope.clone().unwrap_or_else(|| "user".into())
+    );
     println!("  arch          {}", sysutil::arch());
     println!(
         "  modes         {}",
@@ -272,12 +287,22 @@ async fn show(ctx: &Ctx, a: ShowArgs) -> Result<()> {
         println!("  commands      {}", m.commands.join(", "));
     }
     if !m.dependencies.is_empty() {
-        println!("  depends on    {}", m.dependencies.iter().map(|d| d.id.as_str()).collect::<Vec<_>>().join(", "));
+        println!(
+            "  depends on    {}",
+            m.dependencies
+                .iter()
+                .map(|d| d.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
     if let Some(u) = &m.uninstall_args {
         println!("  uninstall     {u}");
     }
-    println!("  versions      {} (newest first, showing 6)", versions.len());
+    println!(
+        "  versions      {} (newest first, showing 6)",
+        versions.len()
+    );
     for v in versions.iter().take(6) {
         println!("                {v}");
     }
@@ -303,7 +328,10 @@ async fn install(ctx: &Ctx, a: InstallArgs) -> Result<()> {
         bail!(
             "{} {}",
             ctx.t("not_in_index", &[&a.id]),
-            ctx.t("try_search", &[a.id.split('.').next_back().unwrap_or(&a.id)])
+            ctx.t(
+                "try_search",
+                &[a.id.split('.').next_back().unwrap_or(&a.id)]
+            )
         );
     }
     let http = Http::new(ctx.verbose)?;
@@ -349,16 +377,19 @@ async fn install(ctx: &Ctx, a: InstallArgs) -> Result<()> {
                 continue;
             }
             if let Ok(drows) = idx.find_by_id(&id) {
-                if let Ok(c) =
-                    resolve::select(&loader, &drows, &InstallOptions {
+                if let Ok(c) = resolve::select(
+                    &loader,
+                    &drows,
+                    &InstallOptions {
                         version: None,
                         arch: None,
                         scope: None,
                         interactive: false,
                         verbose: ctx.verbose,
                         minimum_version: None,
-                    })
-                    .await
+                    },
+                )
+                .await
                 {
                     plan.push(c);
                 }
@@ -453,7 +484,10 @@ fn uninstall(ctx: &Ctx, a: UninstallArgs) -> Result<()> {
     // Preferred: the package's own uninstall mechanism.
     let mut removed = false;
     if let Some(entry) = entry.as_ref() {
-        println!("uninstalling {} {}...", entry.display_name, entry.display_version);
+        println!(
+            "uninstalling {} {}...",
+            entry.display_name, entry.display_version
+        );
         if !confirm(ctx, a.yes, &entry.display_name)? {
             return Ok(());
         }
@@ -487,7 +521,10 @@ fn uninstall(ctx: &Ctx, a: UninstallArgs) -> Result<()> {
         if let Some(code) = record.as_ref().and_then(|r| r.product_code.clone()) {
             println!(
                 "uninstalling {} (msiexec /x)...",
-                record.as_ref().map(|r| r.id.clone()).unwrap_or_else(|| a.id.clone())
+                record
+                    .as_ref()
+                    .map(|r| r.id.clone())
+                    .unwrap_or_else(|| a.id.clone())
             );
             if !confirm(ctx, a.yes, &a.id)? {
                 return Ok(());
@@ -638,10 +675,7 @@ async fn link(ctx: &Ctx, a: LinkArgs) -> Result<()> {
                 shims.push(c.clone());
             }
         }
-        st.record_install(&state::InstallRecord {
-            shims,
-            ..rec
-        })?;
+        st.record_install(&state::InstallRecord { shims, ..rec })?;
     }
     println!("{}", ctx.t("done", &[]));
     Ok(())
@@ -736,7 +770,7 @@ async fn upgrade(ctx: &Ctx, a: UpgradeArgs) -> Result<()> {
         if id.is_empty() {
             continue;
         }
-        let plan = install(
+        install(
             ctx,
             InstallArgs {
                 id: id.clone(),
@@ -752,7 +786,6 @@ async fn upgrade(ctx: &Ctx, a: UpgradeArgs) -> Result<()> {
             },
         )
         .await?;
-        let _ = plan;
         if !a.dry_run {
             println!("{}", ctx.t("upgraded", &[&id]));
         }
@@ -908,14 +941,21 @@ async fn sync(ctx: &Ctx, a: SyncArgs) -> Result<()> {
 fn info(ctx: &Ctx) -> Result<()> {
     let idx_path = paths::index_db();
     let mut info = serde_json::Map::new();
-    info.insert("version".into(), serde_json::json!(env!("CARGO_PKG_VERSION")));
-    info.insert("dataDir".into(), serde_json::json!(paths::data_dir().display().to_string()));
+    info.insert(
+        "version".into(),
+        serde_json::json!(env!("CARGO_PKG_VERSION")),
+    );
+    info.insert(
+        "dataDir".into(),
+        serde_json::json!(paths::data_dir().display().to_string()),
+    );
     info.insert(
         "index".into(),
-        serde_json::json!(idx_path
-            .exists()
-            .then(|| idx_path.display().to_string())
-            .unwrap_or_else(|| "missing".into())),
+        serde_json::json!(if idx_path.exists() {
+            idx_path.display().to_string()
+        } else {
+            "missing".to_string()
+        }),
     );
     if idx_path.exists() {
         if let Ok(idx) = Index::open(&idx_path) {

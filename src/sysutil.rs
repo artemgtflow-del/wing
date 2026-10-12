@@ -15,10 +15,8 @@ pub fn is_elevated() -> bool {
 /// `Commands:` from the manifests become runnable.
 pub fn ensure_user_path() -> Result<bool> {
     let bin = crate::paths::bin();
-    let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(
-        "Environment",
-        KEY_READ | KEY_WRITE,
-    )?;
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)?;
     let current: String = key.get_value("Path").unwrap_or_default();
     let already = current
         .split(';')

@@ -159,7 +159,11 @@ pub fn tr(locale: &str, key: &str, args: &[&str]) -> String {
 
     let template: String = match entry {
         Some(e) => {
-            let chosen = if idx == 1 && !e.2.is_empty() { e.2 } else { e.1 };
+            let chosen = if idx == 1 && !e.2.is_empty() {
+                e.2
+            } else {
+                e.1
+            };
             if chosen.is_empty() {
                 e.1.to_string()
             } else {

@@ -11,6 +11,9 @@ pub const INSTALLER_TOKEN: &str = "2035";
 
 /// One row of the `manifest` table, with the repository path already rebuilt.
 #[derive(Clone, Debug)]
+// Fields mirror the manifest and ARP schemas. Some surface only in --json or are
+// kept so future commands (trust lists, diagnostics) do not re-parse the source.
+#[allow(dead_code)]
 pub struct ManifestRow {
     pub rowid: i64,
     pub id: String,
@@ -36,12 +39,13 @@ pub struct Hit {
 struct Catalog {
     /// (rowid, package id)
     ids: Vec<(i64, String)>,
-    /// (rowid, display name)
-    names: Vec<(i64, String)>,
     /// (rowid, pre-normalised display name) - avoids re-normalising on every query
     norm_names: Vec<(i64, String)>,
 }
 
+// Fields mirror the manifest and ARP schemas. Some surface only in --json or are
+// kept so future commands (trust lists, diagnostics) do not re-parse the source.
+#[allow(dead_code)]
 pub struct Index {
     pub path: PathBuf,
     conn: Connection,
@@ -66,7 +70,7 @@ impl Index {
             );
         }
         let conn = Connection::open_with_flags(
-            &uri(path),
+            uri(path),
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
         )
         .with_context(|| format!("opening {}", path.display()))?;
@@ -97,25 +101,27 @@ impl Index {
         self.catalog.get_or_init(|| {
             let mut ids = Vec::new();
             if let Ok(mut st) = self.conn.prepare("SELECT rowid, id FROM ids") {
-                if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
+                if let Ok(rows) =
+                    st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+                {
                     for row in rows.flatten() {
                         ids.push(row);
                     }
                 }
             }
-            let mut names = Vec::new();
+            // Names are normalised once here so a search does not re-normalise
+            // 15 000 strings on every query.
+            let mut norm_names: Vec<(i64, String)> = Vec::new();
             if let Ok(mut st) = self.conn.prepare("SELECT rowid, name FROM names") {
-                if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
-                    for row in rows.flatten() {
-                        names.push(row);
+                if let Ok(rows) =
+                    st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+                {
+                    for (rowid, name) in rows.flatten() {
+                        norm_names.push((rowid, normalize(&name)));
                     }
                 }
             }
-            let norm_names = names
-                .iter()
-                .map(|(r, n)| (*r, normalize(n)))
-                .collect();
-            Catalog { ids, names, norm_names }
+            Catalog { ids, norm_names }
         })
     }
 
@@ -168,16 +174,24 @@ impl Index {
             let (rowid, _id_row, name_row, ver_row, pathpart, moniker_row) = row;
             let name: String = self
                 .conn
-                .query_row("SELECT name FROM names WHERE rowid=?1", [name_row], |r| r.get(0))
+                .query_row("SELECT name FROM names WHERE rowid=?1", [name_row], |r| {
+                    r.get(0)
+                })
                 .unwrap_or_else(|_| id.to_string());
             let version: String = self
                 .conn
-                .query_row("SELECT version FROM versions WHERE rowid=?1", [ver_row], |r| r.get(0))
+                .query_row(
+                    "SELECT version FROM versions WHERE rowid=?1",
+                    [ver_row],
+                    |r| r.get(0),
+                )
                 .unwrap_or_default();
             let moniker: String = moniker_row
                 .and_then(|m| {
                     self.conn
-                        .query_row("SELECT moniker FROM monikers WHERE rowid=?1", [m], |r| r.get(0))
+                        .query_row("SELECT moniker FROM monikers WHERE rowid=?1", [m], |r| {
+                            r.get(0)
+                        })
                         .ok()
                 })
                 .unwrap_or_default();
@@ -193,10 +207,7 @@ impl Index {
                 kind_token,
             });
         }
-        out.sort_by(|a, b| {
-            vercmp::cmp(&b.version, &a.version)
-                .then_with(|| a.name.cmp(&b.name))
-        });
+        out.sort_by(|a, b| vercmp::cmp(&b.version, &a.version).then_with(|| a.name.cmp(&b.name)));
 
         // One package+version can have several manifest kinds (installer, msix,
         // zip...). Keep one row per version, preferring the classic installer one.
@@ -337,11 +348,19 @@ impl Index {
         id_rowids.retain(|(_, r)| seen.insert(*r));
 
         // Resolve to (name, latest version).
-        let meta = self.latest_for(id_rowids.iter().map(|(_, r)| *r).take(4000).collect::<Vec<_>>());
+        let meta = self.latest_for(
+            id_rowids
+                .iter()
+                .map(|(_, r)| *r)
+                .take(4000)
+                .collect::<Vec<_>>(),
+        );
 
         let mut hits: Vec<Hit> = Vec::new();
         for (score, rowid) in id_rowids {
-            let Some(id) = meta.0.get(&rowid) else { continue };
+            let Some(id) = meta.0.get(&rowid) else {
+                continue;
+            };
             let name = meta.1.get(&rowid).cloned().unwrap_or_else(|| id.clone());
             let version = meta.2.get(&rowid).cloned().unwrap_or_default();
             hits.push(Hit {
@@ -399,7 +418,14 @@ impl Index {
     }
 
     /// Returns (ids, names, versions) keyed by manifest.id rowid, latest version wins.
-    fn latest_for(&self, id_rowids: Vec<i64>) -> (HashMap<i64, String>, HashMap<i64, String>, HashMap<i64, String>) {
+    fn latest_for(
+        &self,
+        id_rowids: Vec<i64>,
+    ) -> (
+        HashMap<i64, String>,
+        HashMap<i64, String>,
+        HashMap<i64, String>,
+    ) {
         let mut ids = HashMap::new();
         let mut names = HashMap::new();
         let mut versions: HashMap<i64, String> = HashMap::new();
@@ -413,22 +439,34 @@ impl Index {
                 "SELECT m.id, m.name, m.version FROM manifest m WHERE m.id IN ({})",
                 placeholders.join(",")
             );
-            let Ok(mut st) = self.conn.prepare(&sql) else { continue };
+            let Ok(mut st) = self.conn.prepare(&sql) else {
+                continue;
+            };
             let params: Vec<&dyn rusqlite::ToSql> =
                 chunk.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
             let Ok(rows) = st.query_map(params.as_slice(), |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
             }) else {
                 continue;
             };
             for (id_row, name_row, ver_row) in rows.flatten() {
                 let name: String = self
                     .conn
-                    .query_row("SELECT name FROM names WHERE rowid=?1", [name_row], |r| r.get(0))
+                    .query_row("SELECT name FROM names WHERE rowid=?1", [name_row], |r| {
+                        r.get(0)
+                    })
                     .unwrap_or_default();
                 let version: String = self
                     .conn
-                    .query_row("SELECT version FROM versions WHERE rowid=?1", [ver_row], |r| r.get(0))
+                    .query_row(
+                        "SELECT version FROM versions WHERE rowid=?1",
+                        [ver_row],
+                        |r| r.get(0),
+                    )
                     .unwrap_or_default();
                 ids.insert(id_row, String::new()); // placeholder, filled below
                 names.insert(id_row, name);
@@ -443,14 +481,17 @@ impl Index {
         // map rowid -> package id
         let unresolved: Vec<i64> = ids.keys().copied().collect();
         if !unresolved.is_empty() {
-            let placeholders: Vec<String> = (1..=unresolved.len()).map(|i| format!("?{i}")).collect();
+            let placeholders: Vec<String> =
+                (1..=unresolved.len()).map(|i| format!("?{i}")).collect();
             let sql = format!(
                 "SELECT rowid, id FROM ids WHERE rowid IN ({})",
                 placeholders.join(",")
             );
             if let Ok(mut st) = self.conn.prepare(&sql) {
-                let params: Vec<&dyn rusqlite::ToSql> =
-                    unresolved.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+                let params: Vec<&dyn rusqlite::ToSql> = unresolved
+                    .iter()
+                    .map(|v| v as &dyn rusqlite::ToSql)
+                    .collect();
                 if let Ok(rows) = st.query_map(params.as_slice(), |r| {
                     Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
                 }) {
@@ -494,5 +535,4 @@ pub fn normalize(s: &str) -> String {
         .collect()
 }
 
-impl Index {
-}
+impl Index {}

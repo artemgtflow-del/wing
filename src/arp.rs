@@ -3,6 +3,9 @@ use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_6
 use winreg::RegKey;
 
 #[derive(Clone, Debug)]
+// Fields mirror the manifest and ARP schemas. Some surface only in --json or are
+// kept so future commands (trust lists, diagnostics) do not re-parse the source.
+#[allow(dead_code)]
 pub struct InstalledEntry {
     pub key_path: String,
     /// last segment of `key_path`; for MSI packages this is the ProductCode
@@ -45,7 +48,8 @@ impl InstalledEntry {
 }
 
 const UNINSTALL_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
-const UNINSTALL_KEY_WOW: &str = "Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+const UNINSTALL_KEY_WOW: &str =
+    "Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 
 /// Enumerates every Add/Remove Programs entry (native + WOW64 + per-user).
 pub fn installed() -> Result<Vec<InstalledEntry>> {

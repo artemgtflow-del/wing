@@ -41,7 +41,11 @@ impl State {
              CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);",
         )?;
         // Lightweight forward-compatible migrations.
-        ensure_columns(&conn, "installs", &["shims", "product_code", "uninstall_args"])?;
+        ensure_columns(
+            &conn,
+            "installs",
+            &["shims", "product_code", "uninstall_args"],
+        )?;
         Ok(State { conn })
     }
 
