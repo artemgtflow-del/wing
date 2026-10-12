@@ -18,7 +18,7 @@ pub const LOCALES: &[&str] = &["en-US", "ru-RU"];
 /// `(key, en-US, ru-RU)`
 type Entry = (&'static str, &'static str, &'static str);
 
-fn entries() -> &'static [Entry] {
+pub fn entries() -> &'static [Entry] {
     static E: OnceLock<Vec<Entry>> = OnceLock::new();
     E.get_or_init(|| {
         vec![
@@ -122,6 +122,11 @@ fn entries() -> &'static [Entry] {
             ),
             ("index_saved", "saved to {0}", "сохранён в {0}"),
             // --- misc ---
+            (
+                "winget_refusal",
+                "I'm better than winget. Not installing it.",
+                "Я лучше winget. Устанавливать не буду.",
+            ),
             (
                 "requesting_admin",
                 "  requesting administrator rights...",

@@ -321,7 +321,25 @@ async fn show(ctx: &Ctx, a: ShowArgs) -> Result<()> {
 
 // ------------------------------------------------------------------ install
 
+/// The winget package identifier, and the names people actually type.
+///
+/// `wing` reads the WinGet index and the manifests directly and never shells
+/// out to winget, so installing it here would be pointless.
+const WINGET_ID: &str = "Microsoft.AppInstaller";
+
+fn is_winget_package(id: &str) -> bool {
+    let n = crate::index::normalize(id);
+    id.eq_ignore_ascii_case(WINGET_ID)
+        || matches!(n.as_str(), "winget" | "wingetcli" | "appinstaller")
+}
+
 async fn install(ctx: &Ctx, a: InstallArgs) -> Result<()> {
+    // Checked before anything else so the refusal costs no network round trip.
+    if is_winget_package(&a.id) {
+        println!("{}", ctx.t("winget_refusal", &[]));
+        return Ok(());
+    }
+
     let idx = open_index()?;
     let rows = idx.find_by_id(&a.id)?;
     if rows.is_empty() {
@@ -1082,4 +1100,48 @@ fn completions(a: CompletionsArgs) -> Result<()> {
         other => bail!("unsupported shell `{other}` (bash|zsh|fish|powershell|elvish)"),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::entries;
+
+    #[test]
+    fn recognises_the_winget_package() {
+        // The identifier people get from the index.
+        assert!(is_winget_package("Microsoft.AppInstaller"));
+        assert!(is_winget_package("microsoft.appinstaller"));
+        // The names people actually type.
+        assert!(is_winget_package("winget"));
+        assert!(is_winget_package("winget-cli"));
+        assert!(is_winget_package("winget_cli"));
+        assert!(is_winget_package("App Installer"));
+        assert!(is_winget_package("app-installer"));
+    }
+
+    #[test]
+    fn leaves_other_packages_alone() {
+        for id in [
+            "BurntSushi.ripgrep.MSVC",
+            "Microsoft.PowerShell",
+            "Microsoft.AppInstaller.FileBuilder",
+            "elfpie.TizenAppInstaller",
+            "winget-cli-wrapper",
+        ] {
+            assert!(!is_winget_package(id), "{id} must not be treated as winget");
+        }
+    }
+
+    #[test]
+    fn i18n_catalogue_has_both_languages_for_every_key() {
+        let mut keys: Vec<&str> = entries().iter().map(|(k, _, _)| *k).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        for (key, en, ru) in entries() {
+            assert!(!en.is_empty(), "key {key} has no English text");
+            assert!(!ru.is_empty(), "key {key} has no Russian text");
+        }
+        assert!(keys.len() > 30, "catalogue looks truncated");
+    }
 }
